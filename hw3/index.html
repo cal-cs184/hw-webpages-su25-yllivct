@@ -6,20 +6,16 @@
 			h1 {
 				text-align: center;
 			}
-
 			.container {
 				margin: 0 auto;
 				padding: 60px 20%;
 			}
-
 			figure {
 				text-align: center;
 			}
-
 			img {
 				display: inline-block;
 			}
-
 			body {
 				font-family: 'Inter', sans-serif;
 			}
@@ -27,80 +23,321 @@
 	</head>
 	<body>
 		<div class="container">
-		<h1>CS184/284A Spring 2025 Homework 3 Write-Up</h1>
-		<div style="text-align: center;">Names: </div>
+			<h1>CS184/284A Spring 2025 Homework 3 Write-Up</h1>
+			<div style="text-align: center;">Names: Yihong Zhai, Songyan Li</div>
+			<br>
+			Link to webpage: <a href="https://cal-cs184.github.io/hw-webpages-su25-yllivct/hw3/index.html">cal-cs184.github.io/hw-webpages-su25-yllivct/hw3</a><br>
+			Link to GitHub repository: <a href="https://github.com/cal-cs184/hw-pathtracer-114514hw3">github.com/cal-cs184/hw-pathtracer-114514hw3</a>
 
-		<br>
+			<h2>Overview</h2>
+			<p>In this assignment, I implemented a physically based ray tracer. It first constructs BVH for models, then generates rays, intersects with figures and gets the global illumination. In this way, it enables rendering of photorealistic scenes with only diffuse reflection surfaces.</p>
 
-		Link to webpage: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
-		Link to GitHub repository: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
-		
-		<figure>
-			<img src="cornell.png" alt="Cornell Boxes with Bunnies" style="width:70%"/>
-			<figcaption>You can add images with captions!</figcaption>
-		</figure>
 
-		<!--
-		We've already added one heading per part, to make your write-up as navigable when grading. Please fit your write-up within these sections!
-		-->
+			<h2>Part 1: Ray Generation and Scene Intersection</h2>
 
-		<h2>Overview</h2>
-		Give a high-level overview of what you implemented in this homework. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the homework.
+			<p>
+			In this part of the assignment, I implemented ray generation and scene intersection logic to support basic ray tracing functionality. It starts by generating rays from the camera into the scene. For each pixel in the image, <code>ns_aa</code> rays are randomly constructed in camera space and transformed into world space using the camera-to-world transformation. Each ray is then tested for intersection against all geometric primitives in the scene.
+			</p>
 
-		<h2>Part 1: Ray Generation and Scene Intersection</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+			<p>In my <code>Triangle::intersect()</code> function: First, I calculate the surface normal <code>n</code> of the triangle plane using the cross product <code>n = cross(p3-p1, p2-p1)</code>. If <code>dot(r.d,n)==0</code>, they won't intersect; if not, \( t = \frac{(p_1 - \mathbf{o}) \cdot \mathbf{n}}{\mathbf{d} \cdot \mathbf{n}} \). If <code>t</code> lies in the range [min_t,max_t), I then calculate the Barycentric Coordinates(same as the function in hw1). If a,b,c all lie in [0,1], the ray will intersect the triangle, so I set max_t to t and use a,b,c,n1,n2,n3 to get the surface normal <code>isect->n</code>.</p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="1-1.png" width="350px"/>
+					</td>
+					<td style="text-align: center;">
+					<img src="1-2.png" width="350px"/>
+					</td>
+				</tr>
+				</table>
+			</div>
 
-		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is a column in that row. You might find this useful for framing and showing your result images in an organized fashion.</p>
-		<div style="display: flex; flex-direction: column; align-items: center;">
-			<table style="width: 100%; text-align: center; border-collapse: collapse;">
-			  <tr>
-				<td style="text-align: center;">
-				  <img src="cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
-				</td>
-				<td style="text-align: center;">
-				  <img src="cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
-				</td>
-			  </tr>
-			  <tr>
-				<td style="text-align: center;">
-				  <img src="cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
-				</td>
-				<td style="text-align: center;">
-				  <img src="cornell.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
-				</td>
-			  </tr>
+			<h2>Part 2: Bounding Volume Hierarchy</h2>
+			<h3>Recap the BVH Construction Algorithm</h3>
+			<p><strong>Overall pipeline</strong></p>
+			<p>For the range [start, end) compute a bounding box that encloses every primitive and store it in node-&gt;bb. If the number of primitives in the range is less than or equal to max_leaf_size, declare this node a leaf, record the start and end iterators, and stop. Build a second AABB that encloses the centroids of all primitives. Select the dimension (x, y, or z) along which this centroid box has the greatest extent; that axis will be used for splitting. Gather the centroids’ coordinates along the chosen axis and take their arithmetic mean. This mean value acts as a plane that divides space into “left” (centroid &lt; mean) and “right” (centroid ≥ mean). Rearrange the pointers in the [start, end) range so that everything whose centroid lies on the left of the split plane precedes those on the right. Record the iterator returned by the partition operation as mid. If the partition put every primitive on one side—meaning mid equals start or end—fall back to a simple 50/50 split by element count: mid = start + (count / 2). Create the node’s left child from the range [start, mid) and its right child from [mid, end) by repeating steps 1 through 6 for each side.</p>
+
+			<p><strong>Heuristic Choice</strong></p>
+			<ul>
+				<li>Longest-axis minimizes box overlap in expectation.</li>
+				<li>Mean-centroid split is O(n) (no sort).</li>
+				<li>Fallback 50 / 50 split prevents infinitely deep skewed trees on near-coplanar data.</li>
+			</ul>
+
+			<p><strong> .dae files with BVH acceleration</strong></p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="2-1.png" width="350px"/>
+					</td>
+					<td style="text-align: center;">
+					<img src="2-2.png" width="350px"/>
+					</td>
+				</tr>
+				</table>
+			</div>
+			<p>BVH acceleration reduces ray–primitive testing from linear to logarithmic complexity. Combined with nearest-first DFS and ray.max_t early-exit, render times improve by 400x. Dense, spatially balanced meshes profit the most, whereas the simpler cow gains less because only a few BVH levels can be pruned. The mean-centroid heuristic offers this speed-up with negligible build cost and robustly avoids degenerate trees.</p>
+
+			<h2>Part 3: Direct Illumination</h2>
+			<p><strong>Implementations of the direct lighting function</strong></p>
+			<p><em>Uniform Hemisphere Sampling</em></p>
+			<p>In <code>estimate_direct_lighting_hemisphere</code>, I generate N directions wi on the unit hemisphere using <code>hemisphereSampler-&gt;get_sample()</code>, transform them to world space with o2w, then cast shadow rays from hit_p + EPS_F * wi. For each sample that hits a light, accumulate\(\frac{f_r(p,\omega_i\rightarrow\omega_o)L_i(p,\omega_i)\cos\theta_i}{p(\omega_i)}\) and finally divide by N. The PDF is constant \( p(\omega_i)=\frac{1}{2\pi} \) because of uniform sampling.</p>
+
+			<p><em>Importance Sampling Lights</em></p>
+			<p><code>estimate_direct_lighting_importance</code> iterates over scene-&gt;lights. For each light I call <code>light-&gt;sample_L(p, &amp;wi, &amp;distToLight, &amp;pdf)</code>. If the shadow ray is unoccluded, add \( \frac{f_rL_i\cos\theta_i}{pdf} \) to the outgoing radiance. Point lights are treated as delta lights; hence I sample them once to avoid redundant rays.</p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+					<tr>
+						<td style="text-align: center;">
+						<img src="3-1.png" width="400px"/>
+						<figcaption>Hemisphere Sampling</figcaption>
+						</td>
+						<td style="text-align: center;">
+						<img src="3-2.png" width="400px"/>
+						<figcaption>Importance Sampling</figcaption>
+						</td>
+					</tr>
+				</table>
+			</div>
+			<br>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+					<tr>
+						<td style="text-align: center;">
+						<img src="3-3.png" width="350px"/>
+						<figcaption>1-light rays</figcaption>
+						</td>
+						<td style="text-align: center;">
+						<img src="3-4.png" width="350px"/>
+						<figcaption>4-light rays</figcaption>
+						</td>
+					</tr>
+					<tr>
+						<td style="text-align: center;">
+						<img src="3-5.png" width="350px"/>
+						<figcaption>16-light rays</figcaption>
+						</td>
+						<td style="text-align: center;">
+						<img src="3-6.png" width="350px"/>
+						<figcaption>64-light rays</figcaption>
+						</td>
+					</tr>
+				</table>
+			</div>
+			
+			<p><strong>Comparison</strong></p>
+			<p>In my implementation, uniform-hemisphere sampling (UH) and light-importance sampling (LS) both estimate direct lighting with the Monte-Carlo reflection equation, yet they allocate paths very differently. UH draws directions with a constant PDF = \(\frac{1}{2\pi}\), so the vast majority of rays never reach an emitter; the estimator therefore has high variance and produces visibly speckled penumbrae even when the per-pixel sample count is moderate. By contrast, LS samples each light with sample_L, drawing directions proportional to the light’s emitted radiance and geometry. Every accepted ray is guaranteed to hit an actual light source, so energy is concentrated where Li&gt;0. As a result, with the same total ray budget (e.g., one pixel sample, four light rays) LS already yields smooth soft shadows and clean walls, while UH still exhibits high-frequency noise. Increasing the -l flag from 1 to 64 in LS reduces noise roughly with the expected \(\frac{1}{\sqrt{n}}\) rate, whereas UH requires orders-of-magnitude more samples (or additional bounces) to achieve comparable convergence. In short, light-importance sampling dramatically increases efficiency by matching the sampling PDF to the integrand, making it the preferred strategy whenever explicit light information is available.</p>
+
+			<h2>Part 4: Global Illumination</h2>
+			<p><strong>My implementation of the indirect lighting function</strong></p>
+			<p>First I initialize r.depth to max_ray_depth in <code>raytrace_pixel</code>. Then I implement <code>est_radiance_global_illumination</code>: the output should include <code>zero_bounce_radiance</code> if isAccumBounces is true or r.depth==0, and should include <code>at_least_one_bounce_radiance</code> if r.depth>0. Then I implement <code>at_least_one_bounce_radiance</code>. It first calls the <code>one_bounce_radiance</code> function. If r.depth>1, it then samples a new ray from the intersect point with new_ray.depth=r.depth-1 and calls itself to calculate higher bounces.</p>
+			<p style="font-size: 13px;"><em>At first, I forgot to remove the <code>-H</code> flag, which cost me hours to figure out because I kept checking the functions over and over.</em></p>
+			<p><strong>Images rendered with global illumination</strong></p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-1-1.png" width="350px"/>
+					<figcaption>bunny.dae</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-1-2.png" width="350px"/>
+					<figcaption>blob.dae</figcaption>
+					</td>
+				</tr>
+				</table>
+			</div>
+			<p><strong>Comparison between direct illumination and indirect illumination</strong></p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-2-1.png" width="350px"/>
+					<figcaption>direct illumination</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-2-2.png" width="350px"/>
+					<figcaption>indirect illumination</figcaption>
+					</td>
+				</tr>
+				</table>
+			</div>
+			<p><strong>The m-th bounce of light</strong></p>
+			<table style="width:100%; text-align:center; border-collapse: collapse;">
+			<tr>
+				<th style="border: 1px solid black;">max_ray_depth</th>
+				<th style="border: 1px solid black;">Unaccumulated</th>
+				<th style="border: 1px solid black;">Accumulated</th>
+			</tr>
+			<tr>
+				<td style="border: 1px solid black;">m = 0</td>
+				<td style="border: 1px solid black;"><img src="4-3-f0.png" width="300px"><br></td>
+				<td style="border: 1px solid black;"><img src="4-3-t0.png" width="300px"><br></td>
+			</tr>
+			<tr>
+				<td style="border: 1px solid black;">m = 1</td>
+				<td style="border: 1px solid black;"><img src="4-3-f1.png" width="300px"><br></td>
+				<td style="border: 1px solid black;"><img src="4-3-t1.png" width="300px"><br></td>
+			</tr>
+			<tr>
+				<td style="border: 1px solid black;">m = 2</td>
+				<td style="border: 1px solid black;"><img src="4-3-f2.png" width="300px"><br></td>
+				<td style="border: 1px solid black;"><img src="4-3-t2.png" width="300px"><br></td>
+			</tr>
+			<tr>
+				<td style="border: 1px solid black;">m = 3</td>
+				<td style="border: 1px solid black;"><img src="4-3-f3.png" width="300px"><br></td>
+				<td style="border: 1px solid black;"><img src="4-3-t3.png" width="300px"><br></td>
+			</tr>
+			<tr>
+				<td style="border: 1px solid black;">m = 4</td>
+				<td style="border: 1px solid black;"><img src="4-3-f4.png" width="300px"><br></td>
+				<td style="border: 1px solid black;"><img src="4-3-t4.png" width="300px"><br></td>
+			</tr>
+			<tr>
+				<td style="border: 1px solid black;">m = 5</td>
+				<td style="border: 1px solid black;"><img src="4-3-f5.png" width="300px"><br></td>
+				<td style="border: 1px solid black;"><img src="4-3-t5.png" width="300px"><br></td>
+			</tr>
 			</table>
-		</div>
-		
-		<h2>Part 2: Bounding Volume Hierarchy</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+			<p><strong>Analysis of 2nd and 3rd Bounce Contributions</strong></p>
 
-		<h2>Part 3: Direct Illumination</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+			<p>
+			The <strong>2nd and 3rd bounce</strong> includes lights to surfaces that are not in the direct line of sight from light sources, like the ceiling. They add soft illumination to shadowed regions, therefore reduce harsh shadows and make the image more realistic.
+			</p>
 
-		<h2>Part 4: Global Illumination</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+			<p><strong>Russian Roulette(p=0.55)</strong></p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-4-0.png" width="350px"/>
+					<figcaption>m=0</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-4-1.png" width="350px"/>
+					<figcaption>m=1</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-4-2.png" width="350px"/>
+					<figcaption>m=2</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-4-3.png" width="350px"/>
+					<figcaption>m=3</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-4-4.png" width="350px"/>
+					<figcaption>m=4</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-4-100.png" width="350px"/>
+					<figcaption>m=100</figcaption>
+					</td>
+				</tr>
+				</table>
+			</div>
+			<p><strong>Images with different sample-per-pixel rates</strong></p>
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-5-1.png" width="300px"/>
+					<figcaption>s=1</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-5-2.png" width="300px"/>
+					<figcaption>s=2</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-5-4.png" width="300px"/>
+					<figcaption>s=4</figcaption>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-5-8.png" width="300px"/>
+					<figcaption>s=8</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-5-16.png" width="300px"/>
+					<figcaption>s=16</figcaption>
+					</td>
+					<td style="text-align: center;">
+					<img src="4-5-64.png" width="300px"/>
+					<figcaption>s=64</figcaption>
+					</td>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+					<img src="4-5-1024.png" width="300px"/>
+					<figcaption>s=1024</figcaption>
+					</td>
+				</tr>
+				</table>
+			</div>
+			<h2>Part 5: Adaptive Sampling</h2>
+			<p><strong>Adaptive Sampling Explanation</strong></p>
+			<p>Adaptive sampling is a technique used in Monte Carlo path tracing to reduce noise efficiently while minimizing unnecessary computation. In traditional path tracing, a fixed number of samples is taken for every pixel, regardless of how quickly the pixel’s color stabilizes. However, some pixels converge to their true value with very few samples, while others—especially those in complex lighting regions—require many more samples to reduce noise. Applying the same sampling rate to all pixels wastes computational resources. Adaptive sampling addresses this by monitoring the convergence of each pixel individually and stopping sampling early for pixels that have already stabilized. This allows the renderer to allocate more computation to difficult pixels and less to simple ones, improving rendering efficiency.</p>
 
-		<h2>Part 5: Adaptive Sampling</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+			<p>For each pixel, we estimate its mean luminance \( \mu \) and standard deviation \( \sigma \) from the samples collected so far. We define the convergence measure:</p>
+			<p>\[ I = 1.96 \cdot \frac{\sigma}{\sqrt{n}} \]</p>
+			<p>where:</p>
+			<ul>
+				<li>n is the number of samples so far</li>
+				<li>1.96 corresponds to the 95% confidence interval in statistics</li>
+			</ul>
+			<p>If I is small, it means the variance of the pixel is low or the number of samples is high, so the pixel is likely to have converged. We compare I to a tolerance threshold.</p>
 
-		<h2>(Optional) Part 6: Extra Credit Opportunities</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-		
-		<h2>Additional Notes (please remove)</h2>
-		<ul>
-			<li>You can also add code if you'd like as so: <code>code code code</code></li>
-			<li>If you'd like to add math equations, 
-				<ul>
-					<li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
-					<li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
-				</ul>
-			</li>
-		</ul>
+			<p>The adaptive sampling implementation begins by setting the maximum number of samples allowed for a pixel, the batch size for convergence checks, and the tolerance threshold for determining convergence. Two running statistics are maintained for each pixel:</p>
+			<ul>
+				<li>the sum of luminance values from all samples taken so far</li>
+				<li>the sum of their squares</li>
+			</ul>
+
+			<p>These two quantities allow us to calculate the mean and variance of the pixel’s luminance at any time without storing every individual sample.</p>
+
+			<p>The renderer proceeds by taking samples in batches rather than checking for convergence after every single sample. This reduces the computational cost of statistical evaluation. For each batch, a number of rays are generated from slightly jittered positions within the pixel to ensure stochastic sampling. Each ray is traced through the scene to compute its contribution to the pixel’s color, and the resulting radiance is accumulated into both the RGB sum (for final color output) and the luminance statistics (for convergence testing).</p>
+
+			<p>After each batch of samples, the mean and standard deviation of the luminance are computed. These values are used to estimate the 95% confidence interval for the pixel’s luminance. If the half‑width of this interval is below the specified tolerance threshold relative to the mean luminance, the pixel is considered converged and no further sampling is performed. Otherwise, the process repeats until either the pixel converges or the maximum number of samples is reached.</p>
+
+			<p>Once sampling finishes for a pixel, the final RGB color is computed by averaging the accumulated radiance over the number of samples actually taken. The number of samples used is also recorded, enabling the generation of a sampling‑rate visualization that shows how many samples were required for different regions of the image.</p>
+
+			<div style="display: flex; flex-direction: column; align-items: center;">
+				<table style="width: 100%; text-align: center; border-collapse: collapse;">
+				<tr>
+					<td style="text-align: center;">
+					<img src="5-1.png" width="350px"/>
+					</td>
+					<td style="text-align: center;">
+					<img src="5-2.png" width="350px"/>
+					</td>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+					<img src="5-3.png" width="350px"/>
+					</td>
+					<td style="text-align: center;">
+					<img src="5-4.png" width="350px"/>
+					</td>
+				</tr>
+				<tr>
+					<td style="text-align: center;">
+					<img src="5-5.png" width="350px"/>
+					</td>
+					<td style="text-align: center;">
+					<img src="5-6.png" width="350px"/>
+					</td>
+				</tr>
+				</table>
+			</div>
+			<h2>Task Allocation</h2>
+			<p>For this homework, I worked with my partner. I (Songyan Li) worked on part 1,4 and he (Yihong Zhai) worked on part 2,3,5. He also helped me a lot in debugging.</p>
+			<h2>Acknowledgement of AI</h2>
+			<p>We used ChatGPT in this homework. We mainly used it for understanding the requirements and debugging. It was also used to turn the write-up into html.</p>
 		</div>
 	</body>
 </html>
